@@ -1,0 +1,29 @@
+{
+  "name": "agora-integration-poc",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "$npm_execpath run build && vite preview",
+    "deploy": "$npm_execpath run build && wrangler deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "@paralleldrive/cuid2": "^3.3.0",
+    "better-auth": "^1.7.14",
+    "drizzle-orm": "^1.0.0-rc.5",
+    "hono": "^4.13.14"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.44.0",
+    "@cloudflare/workers-types": "^5.20261030.1",
+    "drizzle-kit": "^1.0.0-rc.5",
+    "vite": "^8.1.4",
+    "vite-ssr-components": "^0.8.0",
+    "wrangler": "^4.110.0"
+  },
+  "trustedDependencies": [
+    "esbuild",
+    "workerd"
+  ]
+}

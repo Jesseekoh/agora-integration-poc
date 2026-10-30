@@ -2,5 +2,17 @@
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "agora-integration-poc",
     "compatibility_date": "2025-08-03",
-    "main": "./src/index.tsx"
+    "main": "./src/index.tsx",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "d1_databases": [
+        {
+            "binding": "agora_integration_poc_db",
+            "database_name": "agora-integration-poc-db",
+            "database_id": "cc171904-dadb-4a5b-b975-a3995ddd7c70",
+            "migrations_dir": "./drizzle",
+            "migrations_pattern": "drizzle/*/migration.sql"
+        }
+    ]
 }

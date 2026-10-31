@@ -1,5 +1,5 @@
 import { AppShell } from '../components/app-shell';
-import { UsersIcon } from '../components/icons';
+import { PhoneIcon, UsersIcon, VideoIcon } from '../components/icons';
 
 export type GroupRow = {
   id: string;
@@ -14,34 +14,6 @@ type Props = {
 };
 
 const members = (n: number) => `${n} ${n === 1 ? 'member' : 'members'}`;
-
-const GroupItem = ({ group, action }: { group: GroupRow; action: 'join' | 'leave' }) => (
-  <li class="list-row items-center">
-    <div class="flex size-10 items-center justify-center rounded-box bg-primary/10 font-semibold text-primary">
-      {group.name[0]!.toUpperCase()}
-    </div>
-    <div>
-      <div class="font-medium">{group.name}</div>
-      <div class="text-xs text-base-content/60">{members(group.memberCount)}</div>
-    </div>
-    <div class="flex items-center gap-2">
-      {/* Only members can call a group (enforced by POST /calls/group too). The
-          call script (src/client/calls.ts) handles clicks on [data-group-id]. */}
-      {action === 'leave' && <CallButtons group={group} />}
-      <form method="post" action={`/api/groups/${group.id}/${action}`}>
-        {action === 'join' ? (
-          <button type="submit" class="btn btn-primary btn-sm">
-            Join
-          </button>
-        ) : (
-          <button type="submit" class="btn btn-ghost btn-sm text-error">
-            Leave
-          </button>
-        )}
-      </form>
-    </div>
-  </li>
-);
 
 const CallButtons = ({ group }: { group: GroupRow }) => {
   // The server refuses a group call with no one else to ring
@@ -79,19 +51,35 @@ const CallButtons = ({ group }: { group: GroupRow }) => {
   );
 };
 
-const REMOVED = () => (
-  <li>
-    <form>
-      {true ? (
-        <button type="submit" class="btn btn-primary btn-sm">
-          Join
-        </button>
-      ) : (
-        <button type="submit" class="btn btn-ghost btn-sm text-error">
-          Leave
-        </button>
+const GroupItem = ({ group, action }: { group: GroupRow; action: 'join' | 'leave' }) => (
+  <li class="list-row items-center">
+    <div class="flex size-10 items-center justify-center rounded-box bg-primary/10 font-semibold text-primary">
+      {group.name[0]!.toUpperCase()}
+    </div>
+    <div>
+      <div class="font-medium">{group.name}</div>
+      <div class="text-xs text-base-content/60">{members(group.memberCount)}</div>
+    </div>
+    <div class="flex flex-col items-end gap-2">
+      {/* Only members can call a group (enforced by POST /calls/group too). The
+          call script (src/client/calls.ts) handles clicks on [data-group-id]. */}
+      {action === 'leave' && (
+        <div class="flex gap-2">
+          <CallButtons group={group} />
+        </div>
       )}
-    </form>
+      <form method="post" action={`/api/groups/${group.id}/${action}`}>
+        {action === 'join' ? (
+          <button type="submit" class="btn btn-primary btn-sm">
+            Join
+          </button>
+        ) : (
+          <button type="submit" class="btn btn-ghost btn-sm text-error">
+            Leave
+          </button>
+        )}
+      </form>
+    </div>
   </li>
 );
 

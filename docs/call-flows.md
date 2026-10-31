@@ -226,12 +226,14 @@ running with no UI.
 
 ## Group calls
 
-The server supports them, but **there's no button in the UI to start one yet**.
-The client does handle receiving them.
+Started from the **Call** / **Video** buttons on each group under *Your groups*
+on the groups page. Groups you're not in have no call buttons, and the buttons
+are disabled when you're the only member. The server enforces both rules either way.
 
 | Step | What happens |
 |---|---|
-| Start | `POST /calls/group` (caller must be a member, group must have someone else in it). Insert call (`initiated`), send `incoming-call` with `group` to every other member. Response includes `membersOnline` |
+| Start | `POST /calls/group` (caller must be a member, group must have someone else in it). Insert call (`initiated`), send `incoming-call` with `group` to every other member. Response includes `membersOnline`; if it's 0 the caller hangs up with "No one else in *Group* is online right now" |
+| Ringing | Like a 1:1 call, the caller rings until the first member joins (`call-accepted`), then joins the channel. After 30s with no one joining, the caller ends the call ("No one in *Group* answered") |
 | Join | Any member (not the caller) taps Accept → `POST /calls/:id/accept` → status becomes/stays `accepted`. Only the caller gets `call-accepted`. Members can keep joining while the call is live |
 | Decline | Local only. The dialog closes, nothing is sent, the call carries on for everyone else |
 | Leave | A member who hangs up just leaves Agora. The call stays `accepted` |
@@ -295,8 +297,9 @@ sequenceDiagram
 - **Busy looks like declined** to the caller.
 - **Callee closing the tab while ringing** doesn't reject; the caller rings
   until their 30s timeout.
-- **Group calls**: no UI to start one, no ring timeout, and if the caller
-  leaves without ending it (and `sendBeacon` fails) it stays `accepted`.
+- **Group calls**: if the caller leaves without ending it (and `sendBeacon`
+  fails) it stays `accepted`. The caller stays in the channel after everyone
+  else leaves, until they hang up.
 - **Token expiry**: calls longer than an hour will lose their Agora connection.
 - **Presence**: a change that happens between the users page rendering and its
   SSE stream opening is missed until the next change or a refresh.

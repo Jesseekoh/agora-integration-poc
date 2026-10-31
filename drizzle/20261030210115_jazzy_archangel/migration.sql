@@ -1,0 +1,1 @@
+ALTER TABLE `calls` ADD `media` text DEFAULT 'audio' NOT NULL;

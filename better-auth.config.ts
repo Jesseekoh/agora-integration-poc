@@ -3,7 +3,7 @@
  *
  * Docs: https://www.better-auth.com/docs/concepts/cli
  */
-import { neon } from '@neondatabase/serverless';
+// This file is used to configure the Better Auth CLI for generating authentication schemas and other related files. It specifies the database connection, schema definitions, and other settings required for the CLI to function correctly.
 import { drizzle } from 'drizzle-orm/d1';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter/relations-v2';
 import { betterAuth } from 'better-auth';

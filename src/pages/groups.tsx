@@ -24,8 +24,65 @@ const GroupItem = ({ group, action }: { group: GroupRow; action: 'join' | 'leave
       <div class="font-medium">{group.name}</div>
       <div class="text-xs text-base-content/60">{members(group.memberCount)}</div>
     </div>
-    <form method="post" action={`/api/groups/${group.id}/${action}`}>
-      {action === 'join' ? (
+    <div class="flex items-center gap-2">
+      {/* Only members can call a group (enforced by POST /calls/group too). The
+          call script (src/client/calls.ts) handles clicks on [data-group-id]. */}
+      {action === 'leave' && <CallButtons group={group} />}
+      <form method="post" action={`/api/groups/${group.id}/${action}`}>
+        {action === 'join' ? (
+          <button type="submit" class="btn btn-primary btn-sm">
+            Join
+          </button>
+        ) : (
+          <button type="submit" class="btn btn-ghost btn-sm text-error">
+            Leave
+          </button>
+        )}
+      </form>
+    </div>
+  </li>
+);
+
+const CallButtons = ({ group }: { group: GroupRow }) => {
+  // The server refuses a group call with no one else to ring
+  const alone = group.memberCount < 2;
+  const title = alone ? "You're the only member" : undefined;
+  return (
+    <>
+      <button
+        type="button"
+        class="btn btn-primary btn-soft btn-sm"
+        data-group-id={group.id}
+        data-group-name={group.name}
+        data-media="audio"
+        aria-label={`Voice call ${group.name}`}
+        title={title}
+        disabled={alone}
+      >
+        <PhoneIcon />
+        <span class="hidden sm:inline">Call</span>
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        data-group-id={group.id}
+        data-group-name={group.name}
+        data-media="video"
+        aria-label={`Video call ${group.name}`}
+        title={title}
+        disabled={alone}
+      >
+        <VideoIcon />
+        <span class="hidden sm:inline">Video</span>
+      </button>
+    </>
+  );
+};
+
+const REMOVED = () => (
+  <li>
+    <form>
+      {true ? (
         <button type="submit" class="btn btn-primary btn-sm">
           Join
         </button>

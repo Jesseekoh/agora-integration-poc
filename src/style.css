@@ -1,3 +1,10 @@
-h1 {
-  font-family: Arial, Helvetica, sans-serif;
+@import 'tailwindcss';
+@plugin "daisyui" {
+  themes:
+    light --default,
+    dark --prefersdark;
+}
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }

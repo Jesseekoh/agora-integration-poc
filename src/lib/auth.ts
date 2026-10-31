@@ -3,11 +3,9 @@
  *
  * Docs: https://www.better-auth.com/docs/concepts/cli
  */
-import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/d1';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter/relations-v2';
 import { betterAuth } from 'better-auth';
-// import { betterAuthOptions } from './src/lib/better-auth/options';
 import * as schema from '../db/schema';
 
 export const auth = (env: CloudflareBindings) => {
@@ -20,7 +18,8 @@ export const auth = (env: CloudflareBindings) => {
     }),
     emailAndPassword: { enabled: true },
     advanced: {
-      // disableOriginCheck: env.
+      // This is just for local development, so that I can use bruno or postman to send requests to the API.
+      disableOriginCheck: true,
     },
   });
 };

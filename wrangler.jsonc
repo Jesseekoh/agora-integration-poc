@@ -14,5 +14,31 @@
             "migrations_dir": "./drizzle",
             "migrations_pattern": "drizzle/*/migration.sql"
         }
+    ],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "USER_NOTIFIER",
+                "class_name": "UserNotifier"
+            },
+            {
+                "name": "PRESENCE",
+                "class_name": "Presence"
+            }
+        ]
+    },
+    "migrations": [
+        {
+            "tag": "v1",
+            "new_sqlite_classes": [
+                "UserNotifier"
+            ]
+        },
+        {
+            "tag": "v2",
+            "new_sqlite_classes": [
+                "Presence"
+            ]
+        }
     ]
 }

@@ -6,6 +6,9 @@
     "compatibility_flags": [
         "nodejs_compat"
     ],
+    "vars": {
+        "AGORA_APP_ID": "a7846dd83d5b46b5a82a2834db285c0c"
+    },
     "d1_databases": [
         {
             "binding": "agora_integration_poc_db",

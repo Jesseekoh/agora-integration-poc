@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { createId } from '@paralleldrive/cuid2';
@@ -7,10 +7,18 @@ import { RtcRole, RtcTokenBuilder } from 'agora-token';
 import { AppEnv } from '../types';
 import { requireAuth } from '../middleware/auth';
 import { notifyUser } from '../lib/notify';
-import { calls, groupMembers, groups, user } from '../db/schema';
+import { callHistory, historyFilters } from '../lib/call-history';
+import {
+  callParticipants,
+  calls,
+  groupMembers,
+  groups,
+  user,
+} from '../db/schema';
 
 type Call = typeof calls.$inferSelect;
 type CallStatus = Call['status'];
+type NewParticipant = typeof callParticipants.$inferInsert;
 
 const media = z.enum(['audio', 'video']).default('audio');
 
@@ -98,6 +106,61 @@ const transition = async (
   return call;
 };
 
+// Inserts the call and a participant row for everyone on it in one batch, so
+// there's never a call without its participants
+const createCall = async (
+  c: Context<AppEnv>,
+  values: Omit<typeof calls.$inferInsert, 'id' | 'status'>,
+  calleeIds: string[],
+) => {
+  const db = c.get('db');
+  const id = createId();
+  const participants: NewParticipant[] = [
+    {
+      callId: id,
+      userId: values.callerId,
+      role: 'caller',
+      status: 'joined',
+      joinedAt: new Date().toISOString(),
+    },
+    ...calleeIds.map((userId): NewParticipant => ({
+      callId: id,
+      userId,
+      role: 'callee',
+      status: 'ringing',
+    })),
+  ];
+  const [[call]] = await db.batch([
+    db
+      .insert(calls)
+      .values({ ...values, id, status: 'initiated' })
+      .returning(),
+    db.insert(callParticipants).values(participants),
+  ]);
+  return call!;
+};
+
+// Marks a callee as having joined. An upsert, since someone who joined the
+// group after the call started has no row yet. Rejoining keeps the first joinedAt.
+const markJoined = (c: Context<AppEnv>, callId: string, userId: string) =>
+  c
+    .get('db')
+    .insert(callParticipants)
+    .values({
+      callId,
+      userId,
+      role: 'callee',
+      status: 'joined',
+      joinedAt: new Date().toISOString(),
+    })
+    .onConflictDoUpdate({
+      target: [callParticipants.callId, callParticipants.userId],
+      set: {
+        status: 'joined',
+        joinedAt: sql`coalesce(${callParticipants.joinedAt}, excluded.joined_at)`,
+      },
+    });
+
 export const callsRouter = new Hono<AppEnv>();
 
 callsRouter.use('*', requireAuth);
@@ -145,23 +208,23 @@ callsRouter.post(
       .where(eq(user.id, calleeId));
     if (!callee) return c.json({ error: 'Callee not found' }, 404);
 
-    const [call] = await db
-      .insert(calls)
-      .values({
+    const call = await createCall(
+      c,
+      {
         type: 'direct',
         media,
         channel: `direct_${createId()}`,
         callerId,
         calleeId,
-        status: 'initiated',
-      })
-      .returning();
+      },
+      [calleeId],
+    );
 
     // Build the token before ringing anyone, so a token failure doesn't ring the callee
-    const details = joinDetails(c, call!, me.id);
+    const details = joinDetails(c, call, me.id);
     // Placed whether or not the callee is online, so unanswered calls are still recorded
     await notifyUser(c.env, calleeId, 'incoming-call', {
-      callId: call!.id,
+      callId: call.id,
       type: 'direct',
       media,
       caller: { id: me.id, name: me.name, email: me.email },
@@ -210,21 +273,21 @@ callsRouter.post(
       );
     }
 
-    const [call] = await db
-      .insert(calls)
-      .values({
+    const call = await createCall(
+      c,
+      {
         type: 'group',
         media,
         channel: `group_${groupId}_${createId()}`,
         callerId,
         groupId,
-        status: 'initiated',
-      })
-      .returning();
+      },
+      memberIds,
+    );
 
-    const details = joinDetails(c, call!, me.id);
+    const details = joinDetails(c, call, me.id);
     const payload = {
-      callId: call!.id,
+      callId: call.id,
       type: 'group',
       media,
       caller: { id: me.id, name: me.name, email: me.email },
@@ -235,6 +298,27 @@ callsRouter.post(
     );
 
     return c.json(details, 201);
+  },
+);
+
+// The signed-in user's calls, newest first (see lib/call-history.ts).
+// Registered before /calls/:id so 'history' isn't taken as an id.
+callsRouter.get(
+  '/calls/history',
+  zValidator(
+    'query',
+    z.object({
+      filter: z.enum(historyFilters).optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+    }),
+  ),
+  async (c) => {
+    const { filter, limit } = c.req.valid('query');
+    const rows = await callHistory(c.get('db'), c.get('user')!.id, {
+      filter,
+      limit,
+    });
+    return c.json(rows);
   },
 );
 
@@ -275,11 +359,12 @@ callsRouter.post('/calls/:id/accept', async (c) => {
     if (!call) return c.json({ error: 'Call is no longer ringing' }, 409);
 
     // The callee's own streams hear it too, so their other tabs stop ringing
-    await Promise.all(
-      [call.callerId, me.id].map((uid) =>
+    await Promise.all([
+      markJoined(c, call.id, me.id),
+      ...[call.callerId, me.id].map((uid) =>
         notifyUser(c.env, uid, 'call-accepted', { callId: call.id, by: me.id }),
       ),
-    );
+    ]);
     return c.json(joinDetails(c, call, me.id));
   }
 
@@ -293,10 +378,13 @@ callsRouter.post('/calls/:id/accept', async (c) => {
   const call = await transition(c, id, ['initiated', 'accepted'], 'accepted');
   if (!call) return c.json({ error: 'Call has ended' }, 409);
 
-  await notifyUser(c.env, call.callerId, 'call-accepted', {
-    callId: call.id,
-    by: me.id,
-  });
+  await Promise.all([
+    markJoined(c, call.id, me.id),
+    notifyUser(c.env, call.callerId, 'call-accepted', {
+      callId: call.id,
+      by: me.id,
+    }),
+  ]);
   return c.json(joinDetails(c, call, me.id));
 });
 
@@ -315,11 +403,21 @@ callsRouter.post('/calls/:id/reject', async (c) => {
   const call = await transition(c, id, ['initiated'], 'rejected');
   if (!call) return c.json({ error: 'Call is no longer ringing' }, 409);
 
-  await Promise.all(
-    [call.callerId, me.id].map((uid) =>
+  await Promise.all([
+    c
+      .get('db')
+      .update(callParticipants)
+      .set({ status: 'declined' })
+      .where(
+        and(
+          eq(callParticipants.callId, call.id),
+          eq(callParticipants.userId, me.id),
+        ),
+      ),
+    ...[call.callerId, me.id].map((uid) =>
       notifyUser(c.env, uid, 'call-rejected', { callId: call.id }),
     ),
-  );
+  ]);
   return c.body(null, 204);
 });
 
@@ -338,6 +436,18 @@ callsRouter.post('/calls/:id/end', async (c) => {
 
   const call = await transition(c, id, ['initiated', 'accepted'], 'ended');
   if (!call) return c.json({ error: 'Call is not active' }, 409);
+
+  // Anyone still ringing when the call ends missed it
+  await c
+    .get('db')
+    .update(callParticipants)
+    .set({ status: 'missed' })
+    .where(
+      and(
+        eq(callParticipants.callId, call.id),
+        eq(callParticipants.status, 'ringing'),
+      ),
+    );
 
   const notifyIds =
     call.type === 'direct'

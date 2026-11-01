@@ -11,6 +11,8 @@ import { UsersPage } from '../pages/users';
 import { LoginPage } from '../pages/login';
 import { SignupPage } from '../pages/signup';
 import { onlineUserIds } from '../lib/notify';
+import { callHistory, historyFilters, type HistoryFilter } from '../lib/call-history';
+import { CallsPage } from '../pages/calls';
 
 export const views = new Hono<AppEnv>();
 
@@ -72,6 +74,16 @@ views.get('/users', requireAuthPage, async (c) => {
   const users = rows.map((u) => ({ ...u, online: u.id === me.id || online.has(u.id) }));
 
   return c.render(<UsersPage user={me} users={users} />, { title: 'Users' });
+});
+
+views.get('/calls', requireAuthPage, async (c) => {
+  const me = c.get('user')!;
+  // Unknown ?filter= values just show everything
+  const query = c.req.query('filter');
+  const filter = historyFilters.find((f) => f === query) as HistoryFilter | undefined;
+  const calls = await callHistory(c.get('db'), me.id, { filter, limit: 100 });
+
+  return c.render(<CallsPage user={me} calls={calls} filter={filter} />, { title: 'Calls' });
 });
 
 views.get('/login', redirectIfAuthed, (c) => {

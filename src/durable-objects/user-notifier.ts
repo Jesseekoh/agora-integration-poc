@@ -29,13 +29,17 @@ export class UserNotifier extends DurableObject<CloudflareBindings> {
       await this.ctx.storage.put('userId', userId);
     }
 
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const { readable, writable } = new TransformStream<
+      Uint8Array,
+      Uint8Array
+    >();
     const writer = writable.getWriter();
     this.streams.add(writer);
     this.send(writer, ': connected\n\n');
     this.startHeartbeat();
 
-    if (this.streams.size === 1) await this.ctx.storage.setAlarm(Date.now() + ONLINE_CHECK_MS);
+    if (this.streams.size === 1)
+      await this.ctx.storage.setAlarm(Date.now() + ONLINE_CHECK_MS);
     // On every connect, not just the first: setOnline is a no-op when already
     // online, and this repairs Presence if an earlier update was lost
     if (userId) this.syncPresence(writer, userId).catch(() => {});
@@ -70,11 +74,17 @@ export class UserNotifier extends DurableObject<CloudflareBindings> {
 
   // Marks the user online, then sends the new stream the full online list, so
   // the page can correct any dots rendered or missed before it connected
-  private async syncPresence(writer: WritableStreamDefaultWriter<Uint8Array>, userId: string) {
+  private async syncPresence(
+    writer: WritableStreamDefaultWriter<Uint8Array>,
+    userId: string,
+  ) {
     const presence = this.presence();
     await presence.setOnline(userId);
     const online = await presence.list();
-    this.send(writer, `event: presence-sync\ndata: ${JSON.stringify({ online })}\n\n`);
+    this.send(
+      writer,
+      `event: presence-sync\ndata: ${JSON.stringify({ online })}\n\n`,
+    );
   }
 
   // Not awaited: a closed connection rejects the write, which is how we drop it

@@ -5,7 +5,7 @@ import { LogOutIcon, VideoIcon } from './icons';
 
 type Props = {
   user: { id: string; name: string; email: string };
-  active?: 'home' | 'groups' | 'users';
+  active?: 'home' | 'groups' | 'users' | 'calls';
   children: Child;
 };
 
@@ -43,6 +43,12 @@ export const AppShell = ({ user, active, children }: Props) => (
             class={`btn btn-ghost btn-sm ${active === 'users' ? 'btn-active' : ''}`}
           >
             Users
+          </a>
+          <a
+            href="/calls"
+            class={`btn btn-ghost btn-sm ${active === 'calls' ? 'btn-active' : ''}`}
+          >
+            Calls
           </a>
         </nav>
       </div>

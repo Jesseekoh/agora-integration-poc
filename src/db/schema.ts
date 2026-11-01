@@ -30,6 +30,31 @@ export const calls = sqliteTable('calls', {
     .notNull(),
 });
 
+// One row per person per call, so a user's history is a single indexed lookup.
+// The caller starts 'joined'; callees start 'ringing' and end up 'joined',
+// 'declined', or 'missed' if the call ends while they're still ringing.
+export const callParticipants = sqliteTable(
+  'call_participants',
+  {
+    callId: text('call_id')
+      .notNull()
+      .references(() => calls.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    role: text('role', { enum: ['caller', 'callee'] }).notNull(),
+    status: text('status', { enum: ['ringing', 'joined', 'declined', 'missed'] }).notNull(),
+    joinedAt: text('joined_at'),
+    createdAt: text('created_at')
+      .$defaultFn(() => new Date().toISOString())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.callId, table.userId] }),
+    index('call_participants_user_id_created_at_idx').on(table.userId, table.createdAt),
+  ],
+);
+
 export const groups = sqliteTable('groups', {
   id: text('id')
     .primaryKey()
@@ -59,5 +84,5 @@ export const groupMembers = sqliteTable(
   ],
 );
 
-export const mainPart = defineRelationsPart({ calls, groups, groupMembers });
+export const mainPart = defineRelationsPart({ calls, callParticipants, groups, groupMembers });
 export * from './auth.schema.js';

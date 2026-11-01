@@ -114,6 +114,7 @@ callsRouter.get('/events', async (c) => {
   const out = new Response(res.body, res);
   out.headers.set('cache-control', 'no-cache, no-transform');
   out.headers.set('x-accel-buffering', 'no');
+  // out.headers.set('content-type', 'text/event-stream; charset=utf-8');
   return out;
 });
 
@@ -158,14 +159,15 @@ callsRouter.post(
 
     // Build the token before ringing anyone, so a token failure doesn't ring the callee
     const details = joinDetails(c, call!, me.id);
-    const delivered = await notifyUser(c.env, calleeId, 'incoming-call', {
+    // Placed whether or not the callee is online, so unanswered calls are still recorded
+    await notifyUser(c.env, calleeId, 'incoming-call', {
       callId: call!.id,
       type: 'direct',
       media,
       caller: { id: me.id, name: me.name, email: me.email },
     });
 
-    return c.json({ ...details, calleeOnline: delivered > 0 }, 201);
+    return c.json(details, 201);
   },
 );
 
@@ -228,14 +230,11 @@ callsRouter.post(
       caller: { id: me.id, name: me.name, email: me.email },
       group,
     };
-    const delivered = await Promise.all(
+    await Promise.all(
       memberIds.map((id) => notifyUser(c.env, id, 'incoming-call', payload)),
     );
 
-    return c.json(
-      { ...details, membersOnline: delivered.filter((n) => n > 0).length },
-      201,
-    );
+    return c.json(details, 201);
   },
 );
 

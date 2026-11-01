@@ -54,11 +54,14 @@ const CALLER_RING_MS = 30_000;
 const CALLEE_RING_MS = 45_000;
 
 const config = document.getElementById('call-config');
-const dialog = document.getElementById('call-dialog') as HTMLDialogElement | null;
+const dialog = document.getElementById(
+  'call-dialog',
+) as HTMLDialogElement | null;
 
 const $ = <T extends HTMLElement = HTMLElement>(attr: string) =>
   dialog!.querySelector<T>(`[${attr}]`)!;
-const action = (name: string) => $<HTMLButtonElement>(`data-call-action="${name}"`);
+const action = (name: string) =>
+  $<HTMLButtonElement>(`data-call-action="${name}"`);
 
 // Only one call at a time
 let session: Session | null = null;
@@ -84,7 +87,9 @@ const api = async <T = void>(path: string, body?: unknown): Promise<T> => {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+    } | null;
     throw new Error(data?.error ?? `Request failed (${res.status})`);
   }
   return (res.status === 204 ? undefined : await res.json()) as T;
@@ -163,7 +168,9 @@ const render = () => {
 
 const remoteTile = (uid: UID) => {
   const remote = $('data-call-remote');
-  let tile = remote.querySelector<HTMLElement>(`[data-uid="${CSS.escape(String(uid))}"]`);
+  let tile = remote.querySelector<HTMLElement>(
+    `[data-uid="${CSS.escape(String(uid))}"]`,
+  );
   if (!tile) {
     tile = document.createElement('div');
     tile.dataset.uid = String(uid);
@@ -204,14 +211,19 @@ const teardown = (message?: string, kind?: 'info' | 'error') => {
 // getUserMedia is called before any await, while the tap that started this still
 // counts as a user gesture: Firefox for Android otherwise refuses without prompting.
 const createTracks = async (s: Session) => {
-  const stream = navigator.mediaDevices.getUserMedia({ audio: true, video: s.media === 'video' });
+  const stream = navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: s.media === 'video',
+  });
   const [AgoraRTC, media] = await Promise.all([loadAgora(), stream]);
   // The call may have ended while the permission prompt was up
   if (session !== s) {
     media.getTracks().forEach((t) => t.stop());
     return false;
   }
-  s.mic = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: media.getAudioTracks()[0]! });
+  s.mic = AgoraRTC.createCustomAudioTrack({
+    mediaStreamTrack: media.getAudioTracks()[0]!,
+  });
   const video = media.getVideoTracks()[0];
   if (video) {
     s.cam = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: video });
@@ -235,7 +247,28 @@ const connect = async (s: Session, join: JoinDetails) => {
   if (!(await s.ready)) return;
 
   const AgoraRTC = await loadAgora();
-  const client = (s.client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' }));
+  console.log('Agora compatible:', AgoraRTC.checkSystemRequirements());
+  const client = (s.client = AgoraRTC.createClient({
+    mode: 'rtc',
+    codec: 'vp8',
+  }));
+
+  client.on('connection-state-change', (cur, prev, reason) => {
+    console.log(`Agora connection: ${prev} -> ${cur}`, reason ?? '');
+    // LEAVE is our own client.leave(); anything else dropped us
+    if (cur === 'DISCONNECTED' && reason && String(reason) !== 'LEAVE') {
+      console.error('Agora disconnected:', reason);
+    }
+  });
+  client.on('exception', (e) => {
+    console.error(`Agora exception ${e.code}: ${e.msg} (uid ${e.uid})`);
+  });
+  client.on('token-privilege-will-expire', () => {
+    console.warn('Agora token will expire soon');
+  });
+  client.on('token-privilege-did-expire', () => {
+    console.error('Agora token expired');
+  });
 
   client.on('user-published', async (user, mediaType) => {
     await client.subscribe(user, mediaType);
@@ -243,14 +276,23 @@ const connect = async (s: Session, join: JoinDetails) => {
     else user.videoTrack?.play(remoteTile(user.uid));
   });
   client.on('user-left', (user) => {
-    $('data-call-remote').querySelector(`[data-uid="${CSS.escape(String(user.uid))}"]`)?.remove();
+    $('data-call-remote')
+      .querySelector(`[data-uid="${CSS.escape(String(user.uid))}"]`)
+      ?.remove();
     // In a 1:1 call the other side leaving means the call is over, even if
     // they closed the tab without hanging up
     if (s.type === 'direct') void hangUp('Call ended');
   });
 
-  await client.join(join.appId, join.channel, join.token, join.uid);
+  const joinResult = await client.join(
+    join.appId,
+    join.channel,
+    join.token,
+    join.uid,
+  );
+  console.log('Agora joined channel', join.channel, 'as uid', joinResult);
   if (session !== s) return; // ended while joining; teardown already left
+
   await client.publish([s.mic, s.cam].filter((t) => !!t));
   if (session !== s) return;
 
@@ -282,21 +324,21 @@ const placeCall = async (target: Target, media: Media) => {
   // Get the permission prompt out of the way while it rings
   prepareTracks(s);
   const callerId = config!.dataset.userId;
-  const request =
+  const join$ =
     target.type === 'direct'
-      ? api<JoinDetails & { calleeOnline: boolean }>('/calls/direct', {
+      ? api<JoinDetails>('/calls/direct', {
           callerId,
           calleeId: target.calleeId,
           media,
-        }).then((join) => ({ join, reachable: join.calleeOnline }))
-      : api<JoinDetails & { membersOnline: number }>('/calls/group', {
+        })
+      : api<JoinDetails>('/calls/group', {
           callerId,
           groupId: target.groupId,
           media,
-        }).then((join) => ({ join, reachable: join.membersOnline > 0 }));
+        });
 
   try {
-    const { join, reachable } = await request;
+    const join = await join$;
     s.callId = join.callId;
     s.join = join;
     if (session !== s) {
@@ -305,15 +347,14 @@ const placeCall = async (target: Target, media: Media) => {
       return;
     }
     const early = settledEarly.get(join.callId);
-    if (early) return teardown(early === 'rejected' ? `${name} declined the call` : 'Call ended');
-    if (!reachable) {
-      return hangUp(
-        target.type === 'direct'
-          ? `${name} isn't online right now`
-          : `No one else in ${name} is online right now`,
+    if (early)
+      return teardown(
+        early === 'rejected' ? `${name} declined the call` : 'Call ended',
       );
-    }
-    const unanswered = target.type === 'direct' ? `${name} didn't answer` : `No one in ${name} answered`;
+    const unanswered =
+      target.type === 'direct'
+        ? `${name} didn't answer`
+        : `No one in ${name} answered`;
     s.ringTimer = setTimeout(() => hangUp(unanswered), CALLER_RING_MS);
     await s.ready;
   } catch (err) {
@@ -344,7 +385,8 @@ const declineCall = async () => {
   const s = session;
   if (!s || s.phase !== 'incoming') return;
   teardown();
-  if (s.type === 'direct') await api(`/calls/${s.callId}/reject`).catch(() => {});
+  if (s.type === 'direct')
+    await api(`/calls/${s.callId}/reject`).catch(() => {});
 };
 
 // Leave the call and, where we're allowed to, end it for everyone else.
@@ -363,7 +405,8 @@ async function hangUp(message?: string, kind?: 'info' | 'error') {
 const onIncoming = (call: IncomingCall) => {
   if (session) {
     // Busy: decline 1:1 calls straight away so the caller isn't left hanging
-    if (call.type === 'direct') void api(`/calls/${call.callId}/reject`).catch(() => {});
+    if (call.type === 'direct')
+      void api(`/calls/${call.callId}/reject`).catch(() => {});
     return toast(`Missed a call from ${call.caller.name} while busy`);
   }
 
@@ -373,10 +416,13 @@ const onIncoming = (call: IncomingCall) => {
     media: call.media,
     phase: 'incoming',
     isCaller: false,
-    title: call.group ? `${call.group.name} (${call.caller.name})` : call.caller.name,
+    title: call.group
+      ? `${call.group.name} (${call.caller.name})`
+      : call.caller.name,
   });
   s.ringTimer = setTimeout(() => {
-    if (session === s && s.phase === 'incoming') teardown(`Missed call from ${call.caller.name}`);
+    if (session === s && s.phase === 'incoming')
+      teardown(`Missed call from ${call.caller.name}`);
   }, CALLEE_RING_MS);
   render();
 };
@@ -396,14 +442,17 @@ const onAccepted = ({ callId }: { callId: string }) => {
 
 const onRejected = ({ callId }: { callId: string }) => {
   const s = session;
-  if (!s || s.callId !== callId) return void settledEarly.set(callId, 'rejected');
+  if (!s || s.callId !== callId)
+    return void settledEarly.set(callId, 'rejected');
   teardown(s.phase === 'incoming' ? undefined : `${s.title} declined the call`);
 };
 
 const onEnded = ({ callId }: { callId: string }) => {
   const s = session;
   if (!s || s.callId !== callId) return void settledEarly.set(callId, 'ended');
-  teardown(s.phase === 'incoming' ? `Missed call from ${s.title}` : 'Call ended');
+  teardown(
+    s.phase === 'incoming' ? `Missed call from ${s.title}` : 'Call ended',
+  );
 };
 
 const setDot = (el: HTMLElement, online: boolean) => {
@@ -413,8 +462,16 @@ const setDot = (el: HTMLElement, online: boolean) => {
 };
 
 // Updates the dot on the users page (pages/users.tsx)
-const onPresence = ({ userId, online }: { userId: string; online: boolean }) => {
-  for (const el of document.querySelectorAll<HTMLElement>(`[data-presence-id="${userId}"]`)) {
+const onPresence = ({
+  userId,
+  online,
+}: {
+  userId: string;
+  online: boolean;
+}) => {
+  for (const el of document.querySelectorAll<HTMLElement>(
+    `[data-presence-id="${userId}"]`,
+  )) {
     setDot(el, online);
   }
 };
@@ -422,7 +479,9 @@ const onPresence = ({ userId, online }: { userId: string; online: boolean }) => 
 // Sent on every (re)connect: resets all dots, covering events missed while disconnected
 const onPresenceSync = ({ online }: { online: string[] }) => {
   const ids = new Set(online);
-  for (const el of document.querySelectorAll<HTMLElement>('[data-presence-id]')) {
+  for (const el of document.querySelectorAll<HTMLElement>(
+    '[data-presence-id]',
+  )) {
     setDot(el, ids.has(el.dataset.presenceId!));
   }
 };
@@ -432,7 +491,9 @@ const onPresenceSync = ({ online }: { online: string[] }) => {
 if (config && dialog) {
   const events = new EventSource('/api/events');
   const on = <T>(name: string, handler: (data: T) => void) =>
-    events.addEventListener(name, (e) => handler(JSON.parse((e as MessageEvent).data)));
+    events.addEventListener(name, (e) =>
+      handler(JSON.parse((e as MessageEvent).data)),
+    );
   on('incoming-call', onIncoming);
   on('call-accepted', onAccepted);
   on('call-rejected', onRejected);
@@ -441,7 +502,9 @@ if (config && dialog) {
   on('presence-sync', onPresenceSync);
 
   document.addEventListener('click', (e) => {
-    const button = (e.target as Element).closest<HTMLElement>('[data-callee-id], [data-group-id]');
+    const button = (e.target as Element).closest<HTMLElement>(
+      '[data-callee-id], [data-group-id]',
+    );
     if (!button) return;
     const { calleeId, calleeName, groupId, groupName, media } = button.dataset;
     const target: Target = groupId
@@ -458,13 +521,21 @@ if (config && dialog) {
     const mic = session?.mic;
     if (!mic) return;
     await mic.setMuted(!mic.muted);
-    setToggle(action('mic'), !mic.muted, mic.muted ? 'Unmute microphone' : 'Mute microphone');
+    setToggle(
+      action('mic'),
+      !mic.muted,
+      mic.muted ? 'Unmute microphone' : 'Mute microphone',
+    );
   });
   action('cam').addEventListener('click', async () => {
     const cam = session?.cam;
     if (!cam) return;
     await cam.setMuted(!cam.muted);
-    setToggle(action('cam'), !cam.muted, cam.muted ? 'Turn on camera' : 'Turn off camera');
+    setToggle(
+      action('cam'),
+      !cam.muted,
+      cam.muted ? 'Turn on camera' : 'Turn off camera',
+    );
   });
 
   // Escape would close the dialog without ending the call
@@ -473,7 +544,11 @@ if (config && dialog) {
   // Leaving the page ends the call; sendBeacon still goes out as the page unloads
   window.addEventListener('pagehide', () => {
     const s = session;
-    if (s?.callId && s.phase !== 'incoming' && (s.type === 'direct' || s.isCaller)) {
+    if (
+      s?.callId &&
+      s.phase !== 'incoming' &&
+      (s.type === 'direct' || s.isCaller)
+    ) {
       navigator.sendBeacon(`/api/calls/${s.callId}/end`);
     }
   });

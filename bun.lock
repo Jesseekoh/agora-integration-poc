@@ -6,6 +6,7 @@
       "name": "agora-integration-poc",
       "dependencies": {
         "@better-auth/drizzle-adapter": "^1.7.14",
+        "@hono/swagger-ui": "^0.6.2",
         "@hono/zod-validator": "^0.9.1",
         "@neondatabase/serverless": "^1.2.0",
         "@paralleldrive/cuid2": "^3.3.0",
@@ -153,6 +154,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.28.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
+
+    "@hono/swagger-ui": ["@hono/swagger-ui@0.6.2", "", { "peerDependencies": { "hono": ">=4.0.0" } }, "sha512-EDLlBS+LwpAhhh5K45YH85Yyk9GJuD2E7rKdjTZsBObksXaBz+8jPsen5XZqOS9unw6H1CDq0LKzp0c51K6lsA=="],
 
     "@hono/zod-validator": ["@hono/zod-validator@0.9.1", "", { "peerDependencies": { "hono": ">=4.11.2", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-iiv6w0qrIc0arfvCtUqBWsvl4fXjzaTcQcCJTTtCnkawF9HHGE+KjEl0ox3gQJ6rKZEgE3mLExlQCF72M+mNuw=="],
 

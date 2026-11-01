@@ -8,6 +8,8 @@ import { AppEnv } from './types';
 import { requireAuth } from './middleware/auth';
 import { api } from './routes/api';
 import { views } from './routes/views';
+import { swaggerUI } from '@hono/swagger-ui';
+import { openApiSpec } from './lib/openapi';
 
 const app = new Hono<AppEnv>();
 
@@ -20,6 +22,9 @@ app.use('*', async (c, next) => {
   await next();
 });
 app.use('*', sessionMiddleware);
+
+app.get('/docs', swaggerUI({ url: '/docs/openapi.json', withCredentials: true }));
+app.get('/docs/openapi.json', (c) => c.json(openApiSpec));
 
 app.route('/', api);
 app.route('/', views);
